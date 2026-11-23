@@ -286,5 +286,380 @@ def get_uptime() -> str:
     return str(info)
 
 
+# Docker tools
+@mcp.tool()
+def get_docker_containers() -> str:
+    """Get list of all Docker containers with their status."""
+    try:
+        cmd = ["docker", "ps", "-a", "--format", "{{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Image}}"]
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        if result.returncode == 0:
+            lines = result.stdout.strip().split('\n')
+            if not lines or not lines[0]:
+                return "No containers found"
+            # Format output
+            formatted = "CONTAINER_ID\t\tNAME\t\t\tSTATUS\t\t\tIMAGE\n"
+            formatted += "-" * 100 + "\n"
+            for line in lines:
+                if line.strip():
+                    formatted += line + "\n"
+            return formatted
+        else:
+            return result.stderr or "Failed to get containers"
+    except FileNotFoundError:
+        return "docker command not found"
+    except subprocess.TimeoutExpired:
+        return "Command timeout"
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
+@mcp.tool()
+def get_docker_images() -> str:
+    """Get list of all Docker images."""
+    try:
+        cmd = ["docker", "images", "--format", "{{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"]
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        if result.returncode == 0:
+            lines = result.stdout.strip().split('\n')
+            if not lines or not lines[0]:
+                return "No images found"
+            # Format output
+            formatted = "REPOSITORY\t\tTAG\t\tSIZE\t\t\tCREATED\n"
+            formatted += "-" * 100 + "\n"
+            for line in lines:
+                if line.strip():
+                    formatted += line + "\n"
+            return formatted
+        else:
+            return result.stderr or "Failed to get images"
+    except FileNotFoundError:
+        return "docker command not found"
+    except subprocess.TimeoutExpired:
+        return "Command timeout"
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
+@mcp.tool()
+def get_docker_stats(container: str = "") -> str:
+    """Get Docker container resource usage statistics."""
+    try:
+        if container:
+            # Get stats for specific container
+            cmd = ["docker", "stats", "--no-stream", container]
+        else:
+            # Get stats for all containers
+            cmd = ["docker", "stats", "--no-stream"]
+        
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        
+        if result.returncode == 0:
+            output = result.stdout.strip()
+            if not output:
+                return "No running containers"
+            # Format output with headers
+            lines = output.split('\n')
+            formatted = ""
+            for line in lines:
+                formatted += line + "\n"
+            return formatted
+        else:
+            return result.stderr or "Failed to get stats"
+    except FileNotFoundError:
+        return "docker command not found"
+    except subprocess.TimeoutExpired:
+        return "Command timeout"
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
+@mcp.tool()
+def get_docker_logs(container: str, lines: int = 100) -> str:
+    """Get Docker container logs."""
+    if not container:
+        return "Error: container name is required"
+    
+    # Validate container name
+    if not container.replace("-", "").replace("_", "").replace(".", "").isalnum():
+        return "Error: invalid container name"
+    
+    # Limit lines
+    lines = min(lines, 1000)
+    
+    try:
+        cmd = ["docker", "logs", "--tail", str(lines), container]
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        
+        if result.returncode == 0:
+            output = result.stdout or result.stderr
+            return output or "No logs available"
+        else:
+            return result.stderr or "Failed to get logs"
+    except FileNotFoundError:
+        return "docker command not found"
+    except subprocess.TimeoutExpired:
+        return "Command timeout"
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
+@mcp.tool()
+def get_docker_inspect(container: str) -> str:
+    """Get detailed Docker container information."""
+    if not container:
+        return "Error: container name is required"
+    
+    # Validate container name
+    if not container.replace("-", "").replace("_", "").replace(".", "").isalnum():
+        return "Error: invalid container name"
+    
+    try:
+        cmd = ["docker", "inspect", container]
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        
+        if result.returncode == 0:
+            # Return formatted JSON output (limited)
+            import json
+            try:
+                data = json.loads(result.stdout)
+                # Return only key information
+                if data:
+                    container_info = data[0]
+                    output = f"""Container: {container_info.get('Name', 'N/A').lstrip('/')}
+State: {container_info.get('State', {}).get('Status', 'N/A')}
+Image: {container_info.get('Config', {}).get('Image', 'N/A')}
+Ports: {container_info.get('NetworkSettings', {}).get('Ports', {})}
+Volumes: {container_info.get('Mounts', [])}
+Environment: {container_info.get('Config', {}).get('Env', [])[:5]}"""  # First 5 env vars
+                    return output
+            except:
+                return result.stdout[:2000]  # Return raw output if parsing fails
+        else:
+            return result.stderr or "Failed to inspect container"
+    except FileNotFoundError:
+        return "docker command not found"
+    except subprocess.TimeoutExpired:
+        return "Command timeout"
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
+# Docker Volume tools
+@mcp.tool()
+def get_docker_volumes() -> str:
+    """Get list of all Docker volumes."""
+    try:
+        cmd = ["docker", "volume", "ls", "--format", "{{.Name}}\t{{.Driver}}\t{{.Mountpoint}}"]
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        
+        if result.returncode == 0:
+            lines = result.stdout.strip().split('\n')
+            if not lines or not lines[0]:
+                return "No volumes found"
+            # Format output
+            formatted = "VOLUME_NAME\t\t\tDRIVER\t\tMOUNTPOINT\n"
+            formatted += "-" * 120 + "\n"
+            for line in lines:
+                if line.strip():
+                    formatted += line + "\n"
+            return formatted
+        else:
+            return result.stderr or "Failed to get volumes"
+    except FileNotFoundError:
+        return "docker command not found"
+    except subprocess.TimeoutExpired:
+        return "Command timeout"
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
+@mcp.tool()
+def get_docker_volume_inspect(volume: str) -> str:
+    """Get detailed information about a Docker volume."""
+    if not volume:
+        return "Error: volume name is required"
+    
+    # Validate volume name
+    if not volume.replace("-", "").replace("_", "").isalnum():
+        return "Error: invalid volume name"
+    
+    try:
+        cmd = ["docker", "volume", "inspect", volume]
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        
+        if result.returncode == 0:
+            import json
+            try:
+                data = json.loads(result.stdout)
+                if data:
+                    vol_info = data[0]
+                    output = f"""Volume: {vol_info.get('Name', 'N/A')}
+Driver: {vol_info.get('Driver', 'N/A')}
+Mountpoint: {vol_info.get('Mountpoint', 'N/A')}
+Labels: {vol_info.get('Labels', {})}
+Scope: {vol_info.get('Scope', 'N/A')}"""
+                    return output
+            except:
+                return result.stdout[:2000]
+        else:
+            return result.stderr or "Failed to inspect volume"
+    except FileNotFoundError:
+        return "docker command not found"
+    except subprocess.TimeoutExpired:
+        return "Command timeout"
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
+@mcp.tool()
+def get_docker_volume_usage(volume: str) -> str:
+    """Get usage information of a Docker volume."""
+    if not volume:
+        return "Error: volume name is required"
+    
+    # Validate volume name
+    if not volume.replace("-", "").replace("_", "").isalnum():
+        return "Error: invalid volume name"
+    
+    try:
+        # First get volume info to get mountpoint
+        cmd_inspect = ["docker", "volume", "inspect", volume]
+        result_inspect = subprocess.run(
+            cmd_inspect,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        
+        if result_inspect.returncode != 0:
+            return "Volume not found"
+        
+        import json
+        try:
+            vol_data = json.loads(result_inspect.stdout)
+            if vol_data:
+                mountpoint = vol_data[0].get('Mountpoint', '')
+                if mountpoint:
+                    # Get disk usage of the mountpoint
+                    cmd_du = ["du", "-sh", mountpoint]
+                    result_du = subprocess.run(
+                        cmd_du,
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                        check=False,
+                    )
+                    
+                    if result_du.returncode == 0:
+                        size_info = result_du.stdout.strip()
+                        output = f"""Volume: {volume}
+Mountpoint: {mountpoint}
+Size: {size_info}"""
+                        return output
+        except:
+            pass
+        
+        return f"Could not determine usage for volume {volume}"
+    except FileNotFoundError:
+        return "docker or du command not found"
+    except subprocess.TimeoutExpired:
+        return "Command timeout"
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
+@mcp.tool()
+def get_docker_container_volumes(container: str) -> str:
+    """Get volumes mounted in a Docker container."""
+    if not container:
+        return "Error: container name is required"
+    
+    # Validate container name
+    if not container.replace("-", "").replace("_", "").replace(".", "").isalnum():
+        return "Error: invalid container name"
+    
+    try:
+        cmd = ["docker", "inspect", container, "--format", "{{json .Mounts}}"]
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        
+        if result.returncode == 0:
+            import json
+            try:
+                mounts = json.loads(result.stdout)
+                if not mounts:
+                    return f"Container '{container}' has no mounted volumes"
+                
+                output = f"Volumes mounted in container '{container}':\n"
+                output += "-" * 100 + "\n"
+                for mount in mounts:
+                    output += f"Source (Host/Volume): {mount.get('Source', 'N/A')}\n"
+                    output += f"Destination (Container): {mount.get('Destination', 'N/A')}\n"
+                    output += f"Driver: {mount.get('Driver', 'N/A')}\n"
+                    output += f"Mode: {mount.get('Mode', 'N/A')}\n"
+                    output += f"Type: {mount.get('Type', 'N/A')}\n"
+                    output += "-" * 100 + "\n"
+                return output
+            except:
+                return result.stdout[:2000]
+        else:
+            return result.stderr or "Failed to get container volumes"
+    except FileNotFoundError:
+        return "docker command not found"
+    except subprocess.TimeoutExpired:
+        return "Command timeout"
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
 if __name__ == "__main__":
     main()
