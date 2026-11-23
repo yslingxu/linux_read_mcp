@@ -36,7 +36,7 @@ Linux只读MCP服务器，用于在OpenCode中远程查询系统信息。
 #### 安装uv
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
-source $HOME/.cargo/env
+source $HOME/.local/bin/env
 ```
 
 #### 安装项目
